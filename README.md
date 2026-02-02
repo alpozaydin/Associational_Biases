@@ -1,7 +1,7 @@
 # Investigating Associational Biases in Inter-Model Communication of Large Generative Models
 
 ## Overview
-This is the implementation accompanying the Journal of Artificial Intelligence Research  submission [Investigating Associational Biases in Inter-Model Communication of Large Generative Models](). 
+This is the implementation accompanying the Journal of Artificial Intelligence Research  submission [Investigating Associational Biases in Inter-Model Communication of Large Generative Models](https://arxiv.org/abs/2601.22093). 
 ### Abstract
 Social bias in generative AI can manifest not only as performance disparities but also as “associational bias”, whereby models learn and reproduce stereotypical associations between concepts and demographic groups, even in the absence of explicit demographic information (e.g., associating doctors with men). These associations can persist, propagate, and potentially amplify across repeated exchanges in inter-model communication pipelines, where one generative model’s output becomes another’s input. This concern is especially salient for human-centred perception tasks, such as human activity recognition and affect prediction, where inferences about behaviour and internal states can lead to errors or stereotypical associations that propagate into unequal treatment in sensitive deployments (e.g., wellbeing assessment or safety monitoring). In this work, we focus on concepts related to human activity and affective expression, and study how such associations evolve within an inter-model communication pipeline that alternates between image generation and image description. Using the RAF-DB and PHASE datasets, we quantify demographic distribution drift induced by model-to-model information exchange and assess whether these drifts are systematic using an explainability pipeline. Our results reveal demographic drifts toward younger representations for both actions and emotions, as well as toward more female-presenting representations, primarily for emotions. We further find evidence that some predictions are supported by spurious visual regions (e.g., background or hair) rather than concept-relevant cues (e.g., body or face). We also examine whether these demographic drifts translate into measurable differences in downstream behaviour, i.e., while predicting activity and emotion labels. Finally, we outline mitigation strategies spanning data-centric, training-time, and deployment-time (post-training) interventions, and emphasise the need for careful safeguards when deploying interconnected models in human-centred AI systems.
 ## Table of Contents
@@ -58,6 +58,17 @@ Social bias in generative AI can manifest not only as performance disparities bu
 ├── poetry.lock                 # poetry stuff
 ├── pyproject.toml              # poetry stuff
 └── README.md                   # README
+```
+## Citation
+
+```
+@misc{Dogan2026Investigating,  
+  author        = {F.I. {Dogan} and Y. {Weiss} and K. {Patel} and J. {Cheong} and H. {Gunes}},  
+  title         = {{Investigating Associational Biases in Inter-Model Communication of Large Generative Models}},   
+  year          = {2026},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CY}
+ }
 ```
 
 ## Acknowledgements
