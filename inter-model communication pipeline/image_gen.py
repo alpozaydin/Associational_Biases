@@ -13,7 +13,10 @@ model_id = "stabilityai/stable-diffusion-2-1"
 pipe = StableDiffusionPipeline.from_pretrained(model_id, torch_dtype=torch.float16)
 pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
 
-pipe = pipe.to("mps")
+import platform
+
+_device = "mps" if platform.system() == "Darwin" else ("cuda" if torch.cuda.is_available() else "cpu")
+pipe = pipe.to(_device)
 
 # Recommended if your computer has < 64 GB of RAM
 pipe.enable_attention_slicing()

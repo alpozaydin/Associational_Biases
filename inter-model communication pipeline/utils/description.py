@@ -1,5 +1,7 @@
 from PIL import Image
 
+from utils.initialisation import DEVICE
+
 
 def describe_image_llava(
     processor,
@@ -24,7 +26,7 @@ def describe_image_llava(
     )
 
     inputs = processor(images=image, text=templated_prompt, return_tensors="pt").to(
-        "cuda"
+        DEVICE
     )
 
     output = model.generate(**inputs, max_new_tokens=77)
