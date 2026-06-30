@@ -128,6 +128,36 @@ def _vision_tower(llava):
     return llava.model.vision_tower
 
 
+def _vision_probe_layer(vision_tower, idx: int = 9):
+    """Return the layer-``idx`` Grad-CAM probe module (CLIP ``layer_norm2``).
+
+    Structure-agnostic: the CLIP wrapper has moved/flattened across transformers
+    versions (``vision_model.encoder.layers`` vs ``encoder.layers`` …), so try the
+    known paths, then fall back to the deepest encoder-layer ``ModuleList`` found
+    by introspection (vision-only, so it can't grab LLM layers).
+    """
+    layers = None
+    for path in ("vision_model.encoder.layers", "encoder.layers",
+                 "vision_model.transformer.layers", "transformer.layers"):
+        obj = vision_tower
+        for part in path.split("."):
+            obj = getattr(obj, part, None)
+            if obj is None:
+                break
+        if obj is not None and len(obj):
+            layers = obj
+            break
+    if layers is None:
+        for m in vision_tower.modules():
+            if isinstance(m, torch.nn.ModuleList) and len(m) >= 12 and hasattr(m[0], "self_attn"):
+                layers = m  # keep the last (deepest) such list
+    if layers is None:
+        raise AttributeError(f"no vision encoder layers found on {type(vision_tower).__name__}")
+    layer = layers[idx]
+    norm = getattr(layer, "layer_norm2", None) or getattr(layer, "layernorm2", None)
+    return norm if norm is not None else layer
+
+
 def gradcam_for_label(processor, model, image, prompt, prefix_ids, label_ids):
     """Grad-CAM heatmap attributing the chosen admissible label to vision features.
 
@@ -150,7 +180,7 @@ def gradcam_for_label(processor, model, image, prompt, prefix_ids, label_ids):
     num_views = inputs["pixel_values"].shape[1]
     pixel_4d = inputs["pixel_values"][:, 0].clone().detach().requires_grad_(True)
     token_index = inputs["input_ids"].shape[1] - 1
-    target_layer = _vision_tower(_llava(model)).vision_model.encoder.layers[9].layer_norm2
+    target_layer = _vision_probe_layer(_vision_tower(_llava(model)), idx=9)
 
     wrapper = TokenLogitWrapper(
         model,
