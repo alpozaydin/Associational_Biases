@@ -34,7 +34,12 @@ from PIL import Image
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
-from label_decoding import RAF_EMOTION_LABELS, build_label_prompt, label_token_ids
+from label_decoding import (
+    RAF_EMOTION_LABELS,
+    _append_prefix,
+    build_label_prompt,
+    label_decision_set,
+)
 from lora_describer import DEVICE, load_adapter_describer
 from lora_describer import _load_backbone, _load_processor  # stock baseline for --compare
 
@@ -112,7 +117,7 @@ def _llava(model):
     return model.get_base_model() if isinstance(model, PeftModel) else model
 
 
-def gradcam_for_label(processor, model, image, prompt, ids):
+def gradcam_for_label(processor, model, image, prompt, prefix_ids, label_ids):
     """Grad-CAM heatmap attributing the chosen admissible label to vision features.
 
     :returns: ``(grayscale_cam, label_name, orig_size)``. ``grayscale_cam`` is HxW
@@ -121,13 +126,15 @@ def gradcam_for_label(processor, model, image, prompt, ids):
     orig_size = image.size
     image = upscale_image_if_needed(image)
     inputs = processor(images=image, text=prompt, return_tensors="pt").to(DEVICE)
+    # Feed the shared prefix (e.g. the leading-space piece) so position -1 predicts
+    # the discriminative content token, then pick the predicted admissible label.
+    inputs = _append_prefix(inputs, prefix_ids)
 
-    # Decision token = last input position; pick the predicted admissible label.
     with torch.no_grad():
         last = model(**inputs).logits[:, -1, :]
-        idx = torch.as_tensor(ids, device=last.device)
+        idx = torch.as_tensor(label_ids, device=last.device)
         chosen = idx[last.index_select(-1, idx).argmax(-1)].item()
-    label_name = RAF_EMOTION_LABELS[ids.index(chosen)]
+    label_name = RAF_EMOTION_LABELS[label_ids.index(chosen)]
 
     num_views = inputs["pixel_values"].shape[1]
     pixel_4d = inputs["pixel_values"][:, 0].clone().detach().requires_grad_(True)
@@ -185,7 +192,7 @@ def run(images_dir, annotations, hair_dir, adapter, compare, limit):
         ann = json.load(f)
 
     proc_a, model_a = (load_adapter_describer(adapter) if adapter else _load_stock())
-    ids = label_token_ids(proc_a)
+    prefix_ids, label_ids = label_decision_set(proc_a)  # same tokenizer for stock + adapted
     prompt = build_label_prompt(proc_a)
     models = [("adapted" if adapter else "stock", proc_a, model_a)]
     if compare and adapter:
@@ -202,7 +209,7 @@ def run(images_dir, annotations, hair_dir, adapter, compare, limit):
             continue
         image = Image.open(os.path.join(images_dir, name)).convert("RGB")
         for tag, proc, model in models:
-            gray, _, orig = gradcam_for_label(proc, model, image, prompt, ids)
+            gray, _, orig = gradcam_for_label(proc, model, image, prompt, prefix_ids, label_ids)
             for row in regional_activations(gray, orig, ann[key], hair_dir):
                 for region in agg[tag]:
                     agg[tag][region].append(row[region])

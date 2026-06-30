@@ -24,7 +24,7 @@ import random
 import torch
 from PIL import Image
 
-from label_decoding import RAF_EMOTION_LABELS, build_label_prompt, label_token_ids, task_nll
+from label_decoding import RAF_EMOTION_LABELS, build_label_prompt, label_decision_set, task_nll
 from lora_describer import DEVICE, build_lora_describer, save_adapter
 
 _IMG_EXTS = (".jpg", ".jpeg", ".png", ".bmp")
@@ -69,7 +69,7 @@ def bite_tune(data_dir, placement, steps, lr, subset, seed, out, labels):
     _upcast_trainable(model)
     model.train()
 
-    ids = label_token_ids(processor, labels)
+    prefix_ids, label_ids = label_decision_set(processor, labels)
     prompt = build_label_prompt(processor, labels)
 
     samples = collect_raf_samples(data_dir)
@@ -92,7 +92,7 @@ def bite_tune(data_dir, placement, steps, lr, subset, seed, out, labels):
             inputs = processor(images=image, text=prompt, return_tensors="pt").to(DEVICE)
 
             with torch.autocast(device_type=DEVICE, dtype=torch.float16, enabled=DEVICE == "cuda"):
-                loss = task_nll(model, inputs, ids, gt_index)
+                loss = task_nll(model, inputs, prefix_ids, label_ids, gt_index)
 
             optim.zero_grad(set_to_none=True)
             loss.backward()
