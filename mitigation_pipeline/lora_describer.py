@@ -90,7 +90,6 @@ def _load_backbone(*, to_device: bool) -> LlavaNextForConditionalGeneration:
         token=hf_token,
         cache_dir=os.environ.get("TRANSFORMERS_CACHE"),
     )
-    model.config.pad_token_id = model.config.pad_token_id  # no-op; keep generate happy
     if to_device:
         model.to(DEVICE)
     return model
