@@ -22,7 +22,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · ⛔ decision gate
   - drops → proceed with `llm_only`.
   - no change → escalate to `llm_projector`, then `llm_projector_vision_late`; re-run gate.
 - [ ] Reproduce parent baseline numbers (their Table 8 success-rate protocol) — the comparison everything is measured against.
-- [ ] Sanity: verify `label_token_ids` leading-space assumption holds for the Mistral tokenizer (distinct first sub-tokens per RAF emotion).
+- [x] Sanity: token readout — assumption FAILED (all labels share leading space token `28705`); fixed via `label_decision_set` (shared-prefix strip + content-token readout). Cell 1 now passes.
 - Reading: parent paper end-to-end (re-derive metrics); Lee et al. survey (arXiv:2309.14381); the two given links (ACM/Springer) — map each to data/training/deployment.
 
 ## Week 2 — Redaction + paired-view dataloader
