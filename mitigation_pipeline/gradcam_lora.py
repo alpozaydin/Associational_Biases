@@ -117,6 +117,17 @@ def _llava(model):
     return model.get_base_model() if isinstance(model, PeftModel) else model
 
 
+def _vision_tower(llava):
+    """Locate the CLIP vision tower across transformers versions.
+
+    transformers >=4.48 nests it under ``.model`` (LlavaNextModel) instead of
+    directly on the ForConditionalGeneration class.
+    """
+    if hasattr(llava, "vision_tower"):
+        return llava.vision_tower
+    return llava.model.vision_tower
+
+
 def gradcam_for_label(processor, model, image, prompt, prefix_ids, label_ids):
     """Grad-CAM heatmap attributing the chosen admissible label to vision features.
 
@@ -139,7 +150,7 @@ def gradcam_for_label(processor, model, image, prompt, prefix_ids, label_ids):
     num_views = inputs["pixel_values"].shape[1]
     pixel_4d = inputs["pixel_values"][:, 0].clone().detach().requires_grad_(True)
     token_index = inputs["input_ids"].shape[1] - 1
-    target_layer = _llava(model).vision_tower.vision_model.encoder.layers[9].layer_norm2
+    target_layer = _vision_tower(_llava(model)).vision_model.encoder.layers[9].layer_norm2
 
     wrapper = TokenLogitWrapper(
         model,
