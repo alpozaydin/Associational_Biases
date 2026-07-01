@@ -55,7 +55,10 @@ def _target_modules_regex(placement: str) -> str:
     if placement == "llm_only":
         return rf"^.*(?:{llm})$"
 
-    projector = r"multi_modal_projector\..*"
+    # LlavaNext projector is `linear_1 -> act -> linear_2`. Target only the
+    # Linear children; a broader glob would drag GELUActivation into PEFT, which
+    # only supports Linear/Embedding/Conv, and inject_adapter raises.
+    projector = r"multi_modal_projector\.linear_[12]"
     if placement == "llm_projector":
         return rf"^.*(?:{llm}|{projector})$"
 
