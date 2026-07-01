@@ -19,7 +19,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · ⛔ decision gate
   - [x] `bite_tune.py --placement llm_only` 300 steps on 350-img RAF-train subset; nll 1.39 → 0.82; adapter saved.
   - [x] `gradcam_lora.py --adapter <out> --compare` → adapted `hair=0.262 face=0.328 background=0.410` (n=277).
   - Fix in flight: `TokenLogitWrapper` had to preserve full pixel_values (5D anyres) + image_sizes so transformers>=4.48's strict token↔feature check passes; view 0 alone gets the grad.
-- [x] ⛔ **Gate (end Wk1):** hair delta = **−0.032 (PASS)** — vision-tower Grad-CAM moved under `llm_only`. Half-good: hair dropped but shifted to *background*, not face. Direction is job of Wk3 consistency loss, not this bite spike. Proceed with `llm_only` for Wk2/3; escalate only if consistency-driven training keeps landing on background.
+- [x] ⛔ **Gate (end Wk1):** vision-tower Grad-CAM moved but WRONG direction.
+  - `llm_only` Δ: hair −0.032, face −0.013, background +0.044.
+  - Escalated to `llm_projector` (also fixed a PEFT regex bug — `multi_modal_projector\..*` was catching GELUActivation; scoped to `linear_[12]`). Δ: hair −0.024, face −0.020, background +0.044.
+  - Same failure mode both placements → **reach is not the constraint**. Task-only NLL has no signal that face > background; it just re-routes attention off hair onto whichever spurious cue is cheapest. Fix belongs in the loss (Wk3 consistency), not in placement. No point escalating to `+vision_late`.
+  - Proceed with `llm_only` into Wk2/3 (cheaper adapter, same reach). Revisit placement only if consistency-driven training keeps landing wrong.
 - [ ] Reproduce parent baseline numbers (their Table 8 success-rate protocol) — the comparison everything is measured against.
 - [x] Sanity: token readout — assumption FAILED (all labels share leading space token `28705`); fixed via `label_decision_set` (shared-prefix strip + content-token readout). Cell 1 now passes.
 - Reading: parent paper end-to-end (re-derive metrics); Lee et al. survey (arXiv:2309.14381); the two given links (ACM/Springer) — map each to data/training/deployment.
