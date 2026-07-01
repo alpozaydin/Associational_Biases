@@ -36,8 +36,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · ⛔ decision gate
 - Reading: LoRA (Hu 2021) + a **2025-26 PEFT-for-VLM** survey; token-level Grad-CAM for LLaVA (2025).
 
 ## Week 3 — Consistency + LoRA training
-- [ ] `train_consistency.py`: `L = L_task(x) + λ·L_consistency(x, x')` using `label_decoding.consistency_kl`.
-- [ ] First emotion run on RAF-DB; checkpoint by val accuracy + val consistency loss.
+- [x] `train_consistency.py`: `L = L_task(x) + λ·L_consistency(x, x')` on the paired-view dataset. Placement locked `llm_only` per Wk1. Intact side stop-grad on the KL (SimSiam-style asymmetric); `--loss-mode {kl,simsiam,byol}` stubbed for Sec 5.4 ablation.
+- [ ] First emotion run on RAF-DB (1395-img train subset, 1000 steps, λ=1.0, redact=hair). Success = hair Grad-CAM drops further vs Wk1 adapter AND face activation rises (not just background).
+- [ ] Watch cons-loss magnitude across training: if it stays ~0, label-space consistency has no signal (attention ≠ decision) → escalate to Sec 5.4 ablation 6 (embedding-space consistency) early rather than as a Wk10-11 comparison.
+- [ ] Checkpoint by val accuracy + val consistency loss (needs a held-out val split — TODO wire this up before longer runs).
 - Reading: counterfactual data augmentation (Maudslay, Dinan); shortcut learning (Geirhos), GroupDRO/JTT.
 
 ## Weeks 4–5 — Train both datasets + related-work draft
@@ -57,8 +59,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · ⛔ decision gate
 - [ ] Optional: deployment-time generator-side fix (Fair Diffusion / control-token) **only if** co-primary required.
 - Reading: current describer SOTA — is LLaVA-NeXT still the right base vs Qwen-VL / InternVL successors?
 
-## Weeks 10–11 — Ablations
+## Weeks 10–11 — Ablations + optional SSL extension
 - [ ] mask-only vs paired-consistency · hair-only vs hair+skin · LoRA placement · `λ` sweep · cross-dataset transfer (train RAF→test PHASE and reverse).
+- [ ] **Consistency-space ablation** (SSL): KL on label distribution (ours) vs SimSiam-style cosine on the LLM penultimate embedding of the decision-token position vs SimSiam-style on the projector output. Tests whether label-space consistency is enough or whether invariance needs to live deeper. Trainer already carries `--loss-mode {kl,simsiam,byol}` flag — this is a config sweep, not a rewrite.
+- [ ] **Anti-collapse regularizer** (SSL): KL only vs KL + VICReg-style variance term. Only run if the `λ` sweep shows val-accuracy dropping as `λ` grows (i.e. task signal traded for cheap consistency). Otherwise cite as considered-and-not-needed.
+- [ ] **SSL on the SD3.5↔LLaVA loop** (Roadmap §11 stretch, Wk10-11 if time): SwAV or MoCo on loop-generated unlabeled images with the LoRA-LLaVA describer frozen, updating a second small LoRA slot. Bridges supervised view-consistency (RAF/PHASE) and self-supervised loop-drift correction. Natural feed into the paper's Discussion / Sec 7 generator-side option.
 
 ## Week 12 — Writing, figures, final eval.
 

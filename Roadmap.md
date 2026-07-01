@@ -100,6 +100,8 @@ Freeze the generator. Run the loop twice on the **identical seed set** -- once w
 3. LoRA placement: LLM-only vs +projector vs +late-vision (RQ-B mechanism).
 4. `λ` sweep (accuracy/fairness trade-off curve).
 5. Cross-dataset transfer: train RAF-DB, test PHASE and vice versa.
+6. **Consistency space** (SSL-motivated): `KL on label distribution` (ours) vs `SimSiam-style cosine on the LLM penultimate embedding of the decision-token position` vs `SimSiam-style on the multi-modal projector output`. Tests whether label-space consistency is enough or whether invariance needs to live deeper in the network. Directly borrows from the SSL literature (BYOL/SimSiam) applied to a supervised, view-consistency setting.
+7. **Anti-collapse regularizer** (SSL-motivated): `KL only` vs `KL + VICReg-style variance term`. If a `λ` sweep shows val-accuracy dropping as `λ` grows (i.e. the model is trading task signal for cheap consistency), the variance term is the mechanistic fix; if not, we cite it as considered-and-not-needed.
 
 ## 6. Reading track
 
@@ -154,3 +156,7 @@ The eval harness already exists in the parent repo, which de-risks weeks 6-7 sub
 1. Co-primary drift reduction: accept the data-contingent decision (isolation experiment sets billing), or require it up front (then we add the Sec 7 generator arm and widen scope)?
 2. Model base: keep LLaVA-NeXT/Mistral for comparability, or upgrade to a current VLM if reading shows the field has moved?
 3. Activity scope: confirm it is generalization-only, deferred to wk 8-9, and may be dropped if emotion-across-two-datasets fills the time.
+
+## 11. Extensions (post-primary result)
+
+**SSL on the SD3.5<->LLaVA loop (Wk10-11 if time).** Once we plug into the full loop (Wk6-7), the generator produces an infinite stream of unlabeled images. This is the SSL sweet spot -- no labels, lots of data, at exactly the distribution we care about (loop-generated). Concretely: with the LoRA-LLaVA describer frozen (adapter loaded), run **SwAV** or **MoCo** using paired-view augmentations (intact + concept-redacted) on the loop's generated images, updating a second, small LoRA slot. This would be a fully self-supervised drift-correction pass -- adapter-free at deploy, still plug-and-play -- and a natural bridge into Sec 7's generator-side discussion. Positions the paper as bridging supervised view-consistency (RAF/PHASE) and self-supervised loop-drift correction. Concrete cost: an extra LoRA head, no data collection.
