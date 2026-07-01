@@ -37,8 +37,9 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · ⛔ decision gate
 
 ## Week 3 — Consistency + LoRA training
 - [x] `train_consistency.py`: `L = L_task(x) + λ·L_consistency(x, x')` on the paired-view dataset. Placement locked `llm_only` per Wk1. Intact side stop-grad on the KL (SimSiam-style asymmetric); `--loss-mode {kl,simsiam,byol}` stubbed for Sec 5.4 ablation.
-- [ ] First emotion run on RAF-DB (1395-img train subset, 1000 steps, λ=1.0, redact=hair). Success = hair Grad-CAM drops further vs Wk1 adapter AND face activation rises (not just background).
-- [ ] Watch cons-loss magnitude across training: if it stays ~0, label-space consistency has no signal (attention ≠ decision) → escalate to Sec 5.4 ablation 6 (embedding-space consistency) early rather than as a Wk10-11 comparison.
+- [x] First emotion run on RAF-DB (1395-img train subset, 1000 steps, λ=1.0, redact=hair). Result: Δhair=−0.033, Δface=−0.023, Δbg=+0.056. Numerically indistinguishable from Wk1's task-only bite (Δhair=−0.032) → consistency loss added no signal.
+- [x] Watch cons-loss: stayed 0.005-0.06 across all 1000 steps, never trended down. **Case C confirmed (attention ≠ decision):** Grad-CAM says hair matters, but KL(f(x) || f(x_hair_masked)) is near-zero → label doesn't depend on hair at the decision-token level.
+- [ ] **Escalate to embedding-space consistency (was Sec 5.4 ablation 6, now Wk4 primary).** SimSiam-style: `-cos(predictor(h_x_masked), stop_grad(h_x))` where `h_·` = penultimate LLM hidden state at the decision-token position. Predictor = 2-layer MLP. Rerun same gate. Paper story becomes "label-space fails because attention ≠ decision → embedding-space fixes it" — earns the fix by first documenting the failure.
 - [ ] Checkpoint by val accuracy + val consistency loss (needs a held-out val split — TODO wire this up before longer runs).
 - Reading: counterfactual data augmentation (Maudslay, Dinan); shortcut learning (Geirhos), GroupDRO/JTT.
 
