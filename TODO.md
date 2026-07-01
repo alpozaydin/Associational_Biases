@@ -59,6 +59,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · ⛔ decision gate
   - Seed=0's +11.4 pp Female-favored gap was outlier seed variance, not signal.
   - Non-surprise-GT per slice (n=4 avg): Female +0.233, Male +0.223, adult +0.238, young +0.228, Female/adult +0.236, Female/young +0.250, Male/adult +0.239, Male/young +0.212 — **uniform lift across all non-tiny slices**. Senior slices (n=12, 13) too small to interpret.
   - **Final story** (n=4 supports): SimSiam consistency + hair+bg redaction (a) prevents FT-alone catastrophic overfit (λ=0 → 47.5%), (b) breaks stock's decoder-fallback pathology (surprise +69 excess → ≤+28 in worst Wk4b seed), (c) uniformly lifts non-surprise-GT decoding by ~+23 pp across all sizable demographic slices. **Not** a demographic-gap-closing intervention: n=4 gender differential 95% CI centered on zero.
+- [x] **Wk4c step 4: n=4 Grad-CAM (RQ-B fill).** Advisor: acc claim was n=4 but CAM was only n=2, leaving RQ-B "hair grounding drops" one step behind. Fill seeds 2+3.
+  - Δhair per seed: **-0.032, -0.043, -0.035, -0.029** (mean **-0.035**, sd 0.006, 95% CI [-0.041, -0.029] — excludes zero).
+  - Δface per seed: -0.020, -0.003, -0.001, -0.045 (mean -0.017, sd 0.020, 95% CI [-0.037, +0.003] — touches zero, seed=3 outlier).
+  - Δbg per seed: +0.052, +0.046, +0.036, +0.074 (mean **+0.052**, sd 0.016, 95% CI [+0.036, +0.068] — bg reliably absorbs shift).
+  - **RQ-B holds at n=4.** Vision-tower Grad-CAM hair activation reliably drops ~3.5 pp; bg reliably rises. Face near flat with seed=3 contrarian drop. Consistent with Wk4b story: hair-off-loading works but partial (bg is the free-lunch invariance-safe cue).
 - [ ] **SKIP** `llm_projector` under simsiam+hair+bg (per advisor: headroom question, wrong priority — placement escalation only makes sense if seed variance confirms the current mechanism *and* demographic slice shows a gap to close). n=4 confirms mechanism (floor-lift) but no gap-closure signal → placement escalation remains unmotivated.
 - [ ] Checkpoint by val accuracy + val consistency loss (needs a held-out val split — TODO wire this up before longer runs).
 - Reading: counterfactual data augmentation (Maudslay, Dinan); shortcut learning (Geirhos), GroupDRO/JTT.
