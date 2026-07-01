@@ -36,9 +36,11 @@ import os
 import random
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
 from label_decoding import (
+    _append_prefix,
     build_label_prompt,
     consistency_kl,
     decision_logits,
@@ -63,6 +65,53 @@ def _forward_dist(processor, model, image, prompt, prefix_ids, label_ids):
     return label_distribution(logits, label_ids)
 
 
+def _forward_h_logits(processor, model, image, prompt, prefix_ids):
+    """Forward -> (hidden state at decision-token position, logits at same position).
+
+    Used by the ``simsiam`` embedding-space loss: we need both the LLM's
+    penultimate representation (for the consistency term) and the vocab logits
+    (for the task NLL, which stays a label-space objective).
+    ``output_hidden_states=True`` returns the LLM's per-layer stack; we take
+    the last layer's activation at the decision position.
+    """
+    inputs = processor(images=image, text=prompt, return_tensors="pt").to(DEVICE)
+    inputs = _append_prefix(inputs, prefix_ids)
+    out = model(**inputs, output_hidden_states=True)
+    h = out.hidden_states[-1][:, -1, :]
+    logits = out.logits[:, -1, :]
+    return h, logits
+
+
+class HiddenPredictor(nn.Module):
+    """SimSiam-style predictor MLP.
+
+    Two Linear layers with LayerNorm + GELU between them. LayerNorm (not the
+    original SimSiam BatchNorm) because we run micro-batch of 1 per step, so
+    BN statistics would be degenerate.
+    """
+
+    def __init__(self, dim: int):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(dim, dim),
+            nn.LayerNorm(dim),
+            nn.GELU(),
+            nn.Linear(dim, dim),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
+
+
+def _resolve_hidden_size(model) -> int:
+    """LLM hidden-state width for LlavaNext. Robust to peft wrapper + config layout."""
+    base = model.get_base_model() if hasattr(model, "get_base_model") else model
+    cfg = base.config
+    if hasattr(cfg, "text_config") and hasattr(cfg.text_config, "hidden_size"):
+        return cfg.text_config.hidden_size
+    return cfg.hidden_size
+
+
 def train(
     data_dir: str,
     annotations: str,
@@ -84,6 +133,17 @@ def train(
 
     prefix_ids, label_ids = label_decision_set(processor)
     prompt = build_label_prompt(processor)
+    label_ids_t = torch.as_tensor(label_ids, device=DEVICE)
+
+    # simsiam mode adds a trainable predictor MLP; kept in fp32 for stable
+    # cosine gradients even when the backbone runs in fp16 autocast.
+    predictor = None
+    if loss_mode == "simsiam":
+        hidden_size = _resolve_hidden_size(model)
+        predictor = HiddenPredictor(hidden_size).to(DEVICE).float()
+        predictor.train()
+        print(f"predictor (simsiam) hidden_size={hidden_size}, "
+              f"params={sum(p.numel() for p in predictor.parameters()):,}")
 
     ds = RAFPairedDataset(data_dir, annotations, hair_dir, mode=redact_mode)
     idxs = list(range(len(ds)))
@@ -96,7 +156,10 @@ def train(
         f"lambda={lambda_c}, redact={redact_mode}, loss={loss_mode}, device={DEVICE}"
     )
 
-    optim = torch.optim.AdamW((p for p in model.parameters() if p.requires_grad), lr=lr)
+    params = [p for p in model.parameters() if p.requires_grad]
+    if predictor is not None:
+        params += list(predictor.parameters())
+    optim = torch.optim.AdamW(params, lr=lr)
 
     step = 0
     running_task = 0.0
@@ -109,22 +172,30 @@ def train(
                 break
             item = ds[i]
             with torch.autocast(device_type=DEVICE, dtype=torch.float16, enabled=DEVICE == "cuda"):
-                logp_x = _forward_dist(processor, model, item["x"], prompt, prefix_ids, label_ids)
-                logp_xp = _forward_dist(processor, model, item["x_prime"], prompt, prefix_ids, label_ids)
-
-                # Task loss on intact view (GT is 0-based label index).
-                target = torch.tensor([item["gt_index"]], device=logp_x.device)
-                loss_task = F.nll_loss(logp_x, target)
-
-                # Consistency loss. Intact view is the reference: stop-grad on
-                # its log-probs so gradient only flows through the redacted-
-                # view forward, pulling x' toward x rather than the reverse.
                 if loss_mode == "kl":
+                    logp_x = _forward_dist(processor, model, item["x"], prompt, prefix_ids, label_ids)
+                    logp_xp = _forward_dist(processor, model, item["x_prime"], prompt, prefix_ids, label_ids)
+                    target = torch.tensor([item["gt_index"]], device=logp_x.device)
+                    loss_task = F.nll_loss(logp_x, target)
+                    # Intact side stop-grad; gradient flows through x' only.
                     loss_cons = consistency_kl(logp_x.detach(), logp_xp)
+                elif loss_mode == "simsiam":
+                    h_x, logits_x = _forward_h_logits(processor, model, item["x"], prompt, prefix_ids)
+                    h_xp, _ = _forward_h_logits(processor, model, item["x_prime"], prompt, prefix_ids)
+                    # Task NLL from vocab logits, restricted to admissible label tokens.
+                    logp_x = F.log_softmax(logits_x.index_select(-1, label_ids_t), dim=-1)
+                    target = torch.tensor([item["gt_index"]], device=logp_x.device)
+                    loss_task = F.nll_loss(logp_x, target)
+                    # Embedding-space consistency: predict intact hidden from x'
+                    # side; stop-grad on the intact target so gradient flows
+                    # through predictor and through the x'-side model only.
+                    p_xp = predictor(h_xp.float())
+                    z_x = h_x.float().detach()
+                    loss_cons = -F.cosine_similarity(p_xp, z_x, dim=-1).mean()
                 else:
                     raise NotImplementedError(
                         f"loss_mode={loss_mode!r} is a Sec 5.4 ablation stub; "
-                        "not implemented in the Wk3 first pass."
+                        "not implemented yet."
                     )
 
                 loss = loss_task + lambda_c * loss_cons
