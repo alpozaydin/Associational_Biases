@@ -12,15 +12,14 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · ⛔ decision gate
 - [x] `bite_tune.py` — minimal task-only LoRA tune to move adapter off identity.
 - [x] `gradcam_lora.py` — Grad-CAM on LoRA describer, stock-vs-adapted region delta.
 - [x] `make_annotations.py` — RetinaFace → rename → hair seg → merge (fills repo glue gap).
-- [ ] **Run** the spike on GPU (Colab A100 / Drive `cambridge_bias_mitigation`; ignore the v6 TPU — stack is CUDA-only):
-  - [ ] pick a RAF probe subset (~300 imgs, stratified by emotion+gender; reuse `explainability_pipeline/random_image_selection/raf_image_selection.py`).
-  - [ ] `make_annotations.py` → `annotations.json` + `hair_masks/`.
-  - [ ] `gradcam_lora.py` **stock** (no `--adapter`) → baseline hair/face/bg activation.
-  - [ ] `bite_tune.py --placement llm_only` (~300 steps, RAF subset; fp16 fits A100 80GB, no QLoRA).
-  - [ ] `gradcam_lora.py --adapter <out> --compare` → read hair-activation delta.
-- [ ] ⛔ **Gate (end Wk1):** does `llm_only` move layer-9 hair activation?
-  - drops → proceed with `llm_only`.
-  - no change → escalate to `llm_projector`, then `llm_projector_vision_late`; re-run gate.
+- [x] **Run** the spike on GPU (amax5 A100 80GB, env `assoc-bias`; not Colab):
+  - [x] pick a RAF probe subset (280 imgs, 40/class from RAF test, seed=0 via `make_probe.py`).
+  - [x] `make_annotations.py` → 280 annotations + hair masks (fixed to force TF-CPU to avoid cuDNN clash with torch).
+  - [x] `gradcam_lora.py` **stock** → baseline `hair=0.294 face=0.341 background=0.366` (n=279).
+  - [x] `bite_tune.py --placement llm_only` 300 steps on 350-img RAF-train subset; nll 1.39 → 0.82; adapter saved.
+  - [x] `gradcam_lora.py --adapter <out> --compare` → adapted `hair=0.262 face=0.328 background=0.410` (n=277).
+  - Fix in flight: `TokenLogitWrapper` had to preserve full pixel_values (5D anyres) + image_sizes so transformers>=4.48's strict token↔feature check passes; view 0 alone gets the grad.
+- [x] ⛔ **Gate (end Wk1):** hair delta = **−0.032 (PASS)** — vision-tower Grad-CAM moved under `llm_only`. Half-good: hair dropped but shifted to *background*, not face. Direction is job of Wk3 consistency loss, not this bite spike. Proceed with `llm_only` for Wk2/3; escalate only if consistency-driven training keeps landing on background.
 - [ ] Reproduce parent baseline numbers (their Table 8 success-rate protocol) — the comparison everything is measured against.
 - [x] Sanity: token readout — assumption FAILED (all labels share leading space token `28705`); fixed via `label_decision_set` (shared-prefix strip + content-token readout). Cell 1 now passes.
 - Reading: parent paper end-to-end (re-derive metrics); Lee et al. survey (arXiv:2309.14381); the two given links (ACM/Springer) — map each to data/training/deployment.
