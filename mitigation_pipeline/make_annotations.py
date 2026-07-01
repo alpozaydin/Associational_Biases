@@ -34,6 +34,15 @@ import json
 import os
 import sys
 
+# RetinaFace + MediaPipe both use TensorFlow; TF's cuDNN grabs the primary CUDA
+# context and clashes with torch's (torch loads first via other Wk1 scripts,
+# then TF gets "No DNN support for stream" on FusedBatchNormV3). Force TF onto
+# CPU here — the detectors are tiny (~280 imgs in ~30s CPU) so no cost, and the
+# torch stages that actually need the GPU aren't loaded in this process anyway.
+# Set BEFORE importing retinaface / mediapipe so TF sees no GPUs at init.
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+
 # Reuse the parent seg stack (explainability_pipeline has no spaces -> importable).
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, "explainability_pipeline", "retina_face"))

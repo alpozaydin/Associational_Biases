@@ -56,25 +56,28 @@ def reshape_transform(tensor):
 
 
 class TokenLogitWrapper(torch.nn.Module):
-    def __init__(self, base_model, inputs_template, token_index, num_image_views=5):
+    """Wraps LlavaNext so pytorch_grad_cam can drive it with a single 4D tensor.
+
+    Stores the full processor output (input_ids, attention_mask, pixel_values 5D,
+    image_sizes) as-is. Forward swaps only view 0 of pixel_values with the
+    perturbed 4D tensor; the other 4 sub-patch views and original image_sizes
+    pass through unchanged. This preserves the anyres token↔feature count
+    contract that transformers>=4.48's LlavaNextModel.get_placeholder_mask
+    enforces, and keeps the non-gradient views showing the real image (not
+    zeros) so the attention head Grad-CAM probes is faithful to inference.
+    """
+
+    def __init__(self, base_model, inputs_template, token_index):
         super().__init__()
         self.model = base_model
-        self.base_inputs = inputs_template.copy()
-        self.base_inputs.pop("pixel_values", None)
-        self.base_inputs.pop("image_sizes", None)
+        self.base_inputs = dict(inputs_template)
         self.token_index = token_index
-        self.num_image_views = num_image_views
 
     def forward(self, pixel_values_4d):
-        current_inputs = self.base_inputs.copy()
-        B, C, H, W = pixel_values_4d.shape
-        pixel_values_5d = torch.zeros(
-            B, self.num_image_views, C, H, W,
-            dtype=pixel_values_4d.dtype, device=pixel_values_4d.device,
-        )
-        pixel_values_5d[:, 0, :, :, :] = pixel_values_4d
-        current_inputs["pixel_values"] = pixel_values_5d
-        current_inputs["image_sizes"] = torch.tensor([(H, W)] * B, device=pixel_values_4d.device)
+        current_inputs = dict(self.base_inputs)
+        pv = current_inputs["pixel_values"].clone()
+        pv[:, 0, :, :, :] = pixel_values_4d
+        current_inputs["pixel_values"] = pv
         out = self.model(**current_inputs)
         logits = out.logits
         target_logits = logits[:, self.token_index, :]
@@ -177,17 +180,11 @@ def gradcam_for_label(processor, model, image, prompt, prefix_ids, label_ids):
         chosen = idx[last.index_select(-1, idx).argmax(-1)].item()
     label_name = RAF_EMOTION_LABELS[label_ids.index(chosen)]
 
-    num_views = inputs["pixel_values"].shape[1]
     pixel_4d = inputs["pixel_values"][:, 0].clone().detach().requires_grad_(True)
     token_index = inputs["input_ids"].shape[1] - 1
     target_layer = _vision_probe_layer(_vision_tower(_llava(model)), idx=9)
 
-    wrapper = TokenLogitWrapper(
-        model,
-        {"input_ids": inputs["input_ids"], "attention_mask": inputs["attention_mask"]},
-        token_index=token_index,
-        num_image_views=num_views,
-    )
+    wrapper = TokenLogitWrapper(model, inputs, token_index=token_index)
     cam = GradCAM(model=wrapper, target_layers=[target_layer], reshape_transform=reshape_transform)
     grayscale = cam(input_tensor=pixel_4d, targets=[ClassifierOutputTarget(chosen)])[0]
     return grayscale, label_name, orig_size
