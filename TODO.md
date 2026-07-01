@@ -29,9 +29,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · ⛔ decision gate
 - Reading: parent paper end-to-end (re-derive metrics); Lee et al. survey (arXiv:2309.14381); the two given links (ACM/Springer) — map each to data/training/deployment.
 
 ## Week 2 — Redaction + paired-view dataloader
-- [ ] Concept-dependent redaction transform producing `x'` from `x` (Roadmap §3 table): hair→mask; facial skin→grayscale/jitter (emotion); hair+background→mask (activity). Reuse hair seg + RetinaFace.
-- [ ] Paired-view dataloader yielding `(x, x', gt_label)` for RAF (and PHASE later).
-- [ ] Precompute/cache masks (hair `.npy`, face bbox) for the train split.
+- [x] Concept-dependent redaction transform `mitigation_pipeline/redaction.py`: modes `hair` / `hair+skin` (emotion) / `hair+bg` (activity, Wk8-9). Grayscale-in-place preserves emotion geometry. Verified visually on `test_2298` (fear).
+- [x] Paired-view dataloader `mitigation_pipeline/paired_dataset.py` yielding `{x, x_prime, gt_index, img_id}` for RAF. Drops RetinaFace no-detect images at construction.
+- [x] Sanity script `mitigation_pipeline/probe_paired.py` saves N side-by-side pairs as PNG for eyeball checks.
+- [~] Precompute masks + bboxes for RAF-train stratified subset (200/class = 1400 imgs); bg annotation running. Full train (12k) after Wk3 first training loop confirms the pipeline.
 - Reading: LoRA (Hu 2021) + a **2025-26 PEFT-for-VLM** survey; token-level Grad-CAM for LLaVA (2025).
 
 ## Week 3 — Consistency + LoRA training
